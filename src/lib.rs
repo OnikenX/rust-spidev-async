@@ -23,9 +23,11 @@
 //! use std::io;
 //! use std::io::prelude::*;
 //! use spidev::{Spidev, SpidevOptions, SpidevTransfer, SpiModeFlags};
-//!
-//! fn create_spi() -> io::Result<Spidev> {
-//!     let mut spi = Spidev::open("/dev/spidev0.0")?;
+//! use tokio::io::AsyncReadExt;
+//! use tokio::io::AsyncWriteExt;
+//! 
+//! async fn create_spi() -> io::Result<Spidev> {
+//!     let mut spi = Spidev::open("/dev/spidev0.0").await?;
 //!     let options = SpidevOptions::new()
 //!          .bits_per_word(8)
 //!          .max_speed_hz(20_000)
@@ -36,16 +38,16 @@
 //! }
 //!
 //! /// perform half duplex operations using Read and Write traits
-//! fn half_duplex(spi: &mut Spidev) -> io::Result<()> {
+//! async fn half_duplex(spi: &mut Spidev) -> io::Result<()> {
 //!     let mut rx_buf = [0_u8; 10];
-//!     spi.write(&[0x01, 0x02, 0x03])?;
-//!     spi.read(&mut rx_buf)?;
+//!     spi.devfile.write_all(&[0x01, 0x02, 0x03]).await?;
+//!     spi.devfile.read(&mut rx_buf).await?;
 //!     println!("{:?}", rx_buf);
 //!     Ok(())
 //! }
 //!
 //! /// Perform full duplex operations using Ioctl
-//! fn full_duplex(spi: &mut Spidev) -> io::Result<()> {
+//! async fn full_duplex(spi: &mut Spidev) -> io::Result<()> {
 //!     // "write" transfers are also reads at the same time with
 //!     // the read having the same length as the write
 //!     let tx_buf = [0x01, 0x02, 0x03];
@@ -57,11 +59,11 @@
 //!     println!("{:?}", rx_buf);
 //!     Ok(())
 //! }
-//!
-//! fn main() {
-//!     let mut spi = create_spi().unwrap();
-//!     println!("{:?}", half_duplex(&mut spi).unwrap());
-//!     println!("{:?}", full_duplex(&mut spi).unwrap());
+//! #[tokio::main]
+//! async fn main() {
+//!     let mut spi = create_spi().await.unwrap();
+//!     println!("{:?}", half_duplex(&mut spi).await.unwrap());
+//!     println!("{:?}", full_duplex(&mut spi).await.unwrap());
 //! }
 //! ```
 
@@ -69,9 +71,9 @@ pub mod spidevioctl;
 pub use crate::spidevioctl::SpidevTransfer;
 
 use bitflags::bitflags;
-use std::fs::{File, OpenOptions};
-use std::io;
-use std::io::prelude::*;
+use tokio::fs::{File, OpenOptions};
+use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+// use tokio::io::prelude::*;
 use std::os::unix::prelude::*;
 use std::path::Path;
 
@@ -118,7 +120,7 @@ bitflags! {
 /// Provide high-level access to Linux Spidev Driver
 #[derive(Debug)]
 pub struct Spidev {
-    devfile: File,
+    pub devfile: File,
 }
 
 /// Options that control defaults for communication on a device
@@ -205,12 +207,12 @@ impl Spidev {
     /// Typically, the path will be something like `"/dev/spidev0.0"`
     /// where the first number if the bus and the second number
     /// is the chip select on that bus for the device being targeted.
-    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Spidev> {
+    pub async fn open<P: AsRef<Path>>(path: P) -> io::Result<Spidev> {
         let devfile = OpenOptions::new()
             .read(true)
             .write(true)
             .create(false)
-            .open(path)?;
+            .open(path).await?;
         Ok(Self::new(devfile))
     }
 
@@ -291,21 +293,8 @@ impl Spidev {
     }
 }
 
-impl Read for Spidev {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.devfile.read(buf)
-    }
-}
 
-impl Write for Spidev {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.devfile.write(buf)
-    }
 
-    fn flush(&mut self) -> io::Result<()> {
-        self.devfile.flush()
-    }
-}
 
 impl AsRawFd for Spidev {
     fn as_raw_fd(&self) -> RawFd {

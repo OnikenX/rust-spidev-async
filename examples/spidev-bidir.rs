@@ -2,8 +2,9 @@ extern crate spidev;
 use spidev::spidevioctl::SpidevTransfer;
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 
-fn main() {
-    let mut spidev = Spidev::open("/dev/spidev0.0").unwrap();
+#[tokio::main]
+async fn main() {
+    let mut spidev = Spidev::open("/dev/spidev0.0").await.unwrap();
     let options = SpidevOptions::new()
         .bits_per_word(8)
         .max_speed_hz(5000)

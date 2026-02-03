@@ -9,7 +9,8 @@
 // macros import
 use super::SpiModeFlags;
 use nix::{ioctl_read, ioctl_write_buf, ioctl_write_ptr};
-use std::io;
+use tokio::io;
+
 use std::marker::PhantomData;
 use std::os::unix::prelude::*;
 
